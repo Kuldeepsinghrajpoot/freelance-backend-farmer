@@ -30,6 +30,7 @@ enum PaymentMethod {
   DEBIT_CARD
   PAYPAL
   STRIPE
+  RAZORPAY
   CASH_ON_DELIVERY
 }
 
@@ -82,17 +83,18 @@ model Payment {
   status    PaymentStatus @default(PENDING)
   method    PaymentMethod
   Order     Order[]
+  price    Float
 }
 
 model Product {
   id          String      @id @default(auto()) @map("_id") @db.ObjectId
   title       String
-  price       Float
+  price       String
   description String
   image       String
-  stock       Int?        @default(0)
+  stock       String?     @default("0")
   category    String?
-  rating      Float?      @default(0)
+  rating      String?     @default("0")
   reviews     Review[]
   published   Boolean?    @default(false)
   createdAt   DateTime?   @default(now())

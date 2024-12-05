@@ -136,7 +136,6 @@ class AdminController {
                     )
                 );
         }
-
         res
             .status(200)
             .json(new ApiResponse(200, "Profile updated successfully", updateProfile));

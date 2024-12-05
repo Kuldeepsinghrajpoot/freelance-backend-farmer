@@ -1,11 +1,9 @@
-// types/product.d.ts
-
-    export type ProductType = {
-        name: string;
-        description: string;
-        image: string;
-        price: number;
-        stock: number;
-        rating: number;
-    };
-
+export interface ProductType {
+    name: string;
+    description: string;
+    price: number;
+    unit?: string;
+    stock?: number;
+    rating?: number;
+  }
+  

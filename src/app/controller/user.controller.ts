@@ -14,7 +14,7 @@ const validRoles = ["ADMIN", "USER"];
 
 class AuthController {
     // Register a new user
-    register = asyncHandler(async (req: Request<{}, {}, SignUpRequestBody>, res: Response) => {
+    register = asyncHandler(async (req: Request, res: Response) => {
         const { name, email, password, phone, role } = req.body;
 
         if ([name, email, password, phone, role].some((field) => !field)) {
@@ -106,13 +106,19 @@ class AuthController {
         }
 
         const { email, phone, address, name } = req.body;
-        const image = req.files as { [fieldname: string]: Express.Multer.File[] };
-        const imageUrl = image?.["image"]?.[0];
 
-        const uploadImage = await uploadOnCloudinary(imageUrl.path);
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+        const productImage = files?.["image"]?.[0];
 
-        if (!imageUrl || !uploadImage) {
-            throw new ApiError(403, "Something went wrong during image upload");
+        let imageUrl;
+        if (productImage) {
+            const uploadPath = await uploadOnCloudinary(productImage.path);
+            if (!uploadPath) {
+                return res
+                    .status(500)
+                    .json(new ApiError(500, "Failed to upload image", "Failed to upload image"));
+            }
+            imageUrl = uploadPath.url;
         }
 
         const updatedProfile = await prisma.user.update({
@@ -121,7 +127,7 @@ class AuthController {
                 phone,
                 address,
                 name,
-                profile: uploadImage?.url,
+                profile: imageUrl || undefined, // Only set imageUrl if available
             },
             where: { id },
         });
@@ -133,7 +139,7 @@ class AuthController {
         res.status(200).json(new ApiResponse(200, "Profile updated successfully"));
     });
 
-    //Logout user 
+    // Logout user
     logout = asyncHandler(async (req: userRequest, res: Response) => {
         const id = req?.user?.id;
         if (!id) {
@@ -146,8 +152,64 @@ class AuthController {
             where: { id },
         });
 
-        req.cookies = {};
-        res.status(200).json(new ApiResponse(200, "User logged out successfully"));
+        res
+            .status(200)
+            .cookie("accessToken", "", { httpOnly: true, secure: true, sameSite: "none", maxAge: 0 })
+            .cookie("refreshToken", "", { httpOnly: true, secure: true, sameSite: "none", maxAge: 0 })
+            .json(new ApiResponse(200, "User logged out successfully"));
+    });
+
+    // Get profile
+    getProfile = asyncHandler(async (req: userRequest, res: Response) => {
+        const id = req?.user?.id;
+
+        if (!id) return res.status(403).json(new ApiError(403, "User not authorized"));
+
+        const user = await prisma.user.findUnique({
+            where: { id },
+            select: {
+                email: true,
+                phone: true,
+                address: true,
+                name: true,
+                profile: true,
+            },
+        });
+
+        if (!user) return res.status(404).json(new ApiError(404, "User not found"));
+
+        return res.status(200).json(new ApiResponse(200, "User profile", user));
+    });
+
+    // Update password
+    updatePassword = asyncHandler(async (req: userRequest, res: Response) => {
+        try {
+            const id = req?.user?.id;
+
+            const { oldPassword, newPassword } = req.body;
+
+            if (!id) return res.status(403).json(new ApiError(403, "User not authorized"));
+
+            if ([oldPassword, newPassword].some((field) => !field)) return res.status(400).json(new ApiError(400, "Missing required fields"));
+            const user = await prisma.user.findUnique({ where: { id } });
+
+            if (!user) return res.status(404).json(new ApiError(404, "User not found"));
+            const isPasswordValid = await bcrypt.compare(oldPassword, user.password ?? "");
+
+            if (!isPasswordValid) return res.status(401).json(new ApiError(401, "Invalid password"));
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+            await prisma.user.update({
+                data: {
+                    password: hashedPassword,
+                },
+                where: { id },
+            });
+
+            return res.status(200).json(new ApiResponse(200, "Password updated successfully"));
+        } catch (error) {
+            throw new ApiError(500, "Internal Server Error", error);
+        }
     });
 }
 
